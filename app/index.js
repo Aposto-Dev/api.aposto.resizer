@@ -145,7 +145,7 @@ exports.handler = async (event) => {
 
     // create a new image using provided dimensions.
     const result = await Sharp(originalImage.Body, { failOnError: false })
-        .resize(width, height, { withoutEnlargement: true, fit })
+        .resize(width, height, { withoutEnlargement: false, fit })
         .rotate()
         .toBuffer();
 
