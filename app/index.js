@@ -141,6 +141,15 @@ exports.handler = async (event) => {
 
     const width = sizes[0] === 'auto' ? null : parseInt(sizes[0]);
     const height = sizes[1] === 'auto' ? null : parseInt(sizes[1]);
+    if (width > 3840 || height > 2160) return {
+        statusCode: 400,
+        body: "Go away!",
+        headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': DEFAULT_CACHE_HEADER,
+            'Age': 0
+        }
+    }
     const fit = action || 'cover';
 
     // create a new image using provided dimensions.
