@@ -59,7 +59,9 @@ exports.handler = async (event) => {
     ];
 
     const unsupportedSharpMimeTypes = [
-        'image/bmp'
+        'image/bmp',
+        'audio/mp3', 
+        'audio/mpeg'
     ];
 
     // validate requested image dimension against whitelisted dimensions.
