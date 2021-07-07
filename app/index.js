@@ -2,6 +2,7 @@
 
 const AWS = require('aws-sdk');
 const Sharp = require('sharp');
+const fs = require('fs')
 
 const S3 = new AWS.S3({ signatureVersion: 'v4' });
 
@@ -18,6 +19,7 @@ const FIT_OPTIONS = [
     'fill',     // Ignore the aspect ratio of the input and stretch to both provided dimensions.
     'inside',   // Preserving aspect ratio, resize the image to be as large as possible while ensuring its dimensions are less than or equal to both those specified.
     'outside',  // Preserving aspect ratio, resize the image to be as small as possible while ensuring its dimensions are greater than or equal to both those specified.
+    'shadow',   // Unrealted to aspect ratio. This one adds a drop shadow to a PNG image.
 ];
 
 function getResource(resourcePath) {
@@ -37,6 +39,26 @@ function getResource(resourcePath) {
             }
         })
     });
+}
+
+function saveResource(resourcePath) {
+    try {    
+        let params = {
+            Bucket: BUCKET,
+            Key: resourcePath
+        };
+        return new Promise((resolve, reject) => {
+            S3.getObject(params, (err, data) => {
+                if (err) {
+                    return reject(err)
+                }
+                fs.writeFileSync(`./temp/${resourcePath}`, data.Body)
+                return resolve(`./temp/${resourcePath}`)
+            })
+        })
+    } catch (err) {
+        return Promise.reject(err)
+    }
 }
 
 exports.handler = async (event) => {
@@ -154,18 +176,40 @@ exports.handler = async (event) => {
     }
     const fit = action || 'cover';
 
-    // create a new image using provided dimensions.
-    const result = await Sharp(originalImage.Body, { failOnError: false })
-        .resize(width, height, { withoutEnlargement: false, fit })
-        .rotate()
-        .toBuffer();
+    let result;
+    let newPath;
+
+    if (fit === 'shadow') {
+        // create a new image with white shadow. The original script is:
+        //      $ convert $1  \
+        //      > \( -clone 0 -background white -shadow 100x3+0+0 \) \
+        //      > -reverse -background none -layers merge +repage shadowed_$1
+        const { exec } = require('child_process')
+        const filepath = await saveResource(filename)
+        exec(`sh ./add_drop_shadow.sh ${filepath}`, (error, stdout, stderr) => {
+            console.log(stdout)
+            console.log(stderr)
+            if (error !== null) {
+                console.log(`exec error: ${error}`)
+            }
+        })
+        result = fs.readFileSync(filepath)
+        newPath = `shadowed/${path}`
+    } else {
+        // create a new image using provided dimensions.
+        result = await Sharp(originalImage.Body, { failOnError: false })
+            .resize(width, height, { withoutEnlargement: false, fit })
+            .rotate()
+            .toBuffer();
+        newPath = path
+    }
 
     // save newly created image to S3.
     await S3.putObject({
         Body: result,
         Bucket: BUCKET,
         ContentType: originalImageMime,
-        Key: path,
+        Key: newPath,
         CacheControl: DEFAULT_CACHE_HEADER
     }).promise();
 
