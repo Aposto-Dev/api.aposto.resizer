@@ -1,1 +1,9 @@
-{}
+{
+  "name": "api.aposto.resizer",
+  "version": "1.0.0",
+  "description": "Image resizer to deploy to lambda",
+  "main": "index.js",
+  "repository": "git@github.com:Aposto-Dev/api.aposto.resizer.git",
+  "author": "Yankı Ekin Yüksel <yanki@aposto.com>",
+  "license": "MIT"
+}
