@@ -210,12 +210,19 @@ exports.handler = async (event) => {
         result = fs.readFileSync(filepath)
         newPath = `shadowed/${path}`
     } else {
-        // create a new image using provided dimensions.
-        result = await Sharp(originalImage.Body, { failOnError: false })
-            .resize(width, height, { withoutEnlargement: false, fit })
-            .rotate()
-            .toBuffer();
-        newPath = path
+        if (originalImageMime === 'image/gif') {
+            // Handle GIF resizing to preserve animation
+            result = await Sharp(originalImage.Body, { animated: true })
+                .resize(width, height, { withoutEnlargement: false, fit })
+                .toBuffer();
+        } else {
+            // Handle other image formats
+            result = await Sharp(originalImage.Body, { failOnError: false })
+                .resize(width, height, { withoutEnlargement: false, fit })
+                .rotate()  // Rotate for non-GIF images
+                .toBuffer();
+        }
+        newPath = path;
     }
 
     // save newly created image to S3.
