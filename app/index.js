@@ -22,6 +22,17 @@ const FIT_OPTIONS = [
     'shadow',   // Unrealted to aspect ratio. This one adds a drop shadow to a PNG image.
 ];
 
+// /c is a reserved path for precomputed images. requests to /c will not use this lambda function and will be redirected to s3 directly. 
+
+function getCachedRedirect(path){
+    return {
+        statusCode: 302,
+        headers: {
+            'Location': `https://${BUCKET}/c/${path}`,
+            'Cache-Control': DEFAULT_CACHE_HEADER
+        }
+    };
+}
 function getResource(resourcePath) {
 
     let params = {
@@ -110,15 +121,16 @@ exports.handler = async (event) => {
     let existingResized = await getResource(path);
     if(existingResized) {
         // if a resized option exists, return it.
-        return {
-            statusCode: 200,
-            body: (Buffer.from(existingResized.Body)).toString('base64'),
-            isBase64Encoded: true,
-            headers: {
-                'Content-Type': existingResized.ContentType,
-                'Cache-Control': DEFAULT_CACHE_HEADER
-            }
-        };
+        return getCachedRedirect(path);
+        // return {
+        //     statusCode: 200,
+        //     body: (Buffer.from(existingResized.Body)).toString('base64'),
+        //     isBase64Encoded: true,
+        //     headers: {
+        //         'Content-Type': existingResized.ContentType,
+        //         'Cache-Control': DEFAULT_CACHE_HEADER
+        //     }
+        // };
     }
 
     // load original image.
@@ -152,16 +164,17 @@ exports.handler = async (event) => {
 
     // handle unsupported Sharp images
     if(unsupportedSharpMimeTypes.includes(originalImageMime)) {
-        return {
-            statusCode: 200,
-            body: (Buffer.from(originalImage.Body)).toString('base64'),
-            isBase64Encoded: true,
-            headers: {
-                'Content-Type': originalImageMime,
-                'Cache-Control': DEFAULT_CACHE_HEADER,
-                'Age': 0
-            }
-        };
+        return getCachedRedirect(filename);
+        // return {
+        //     statusCode: 200,
+        //     body: (Buffer.from(originalImage.Body)).toString('base64'),
+        //     isBase64Encoded: true,
+        //     headers: {
+        //         'Content-Type': originalImageMime,
+        //         'Cache-Control': DEFAULT_CACHE_HEADER,
+        //         'Age': 0
+        //     }
+        // };
     }
 
     const width = sizes[0] === 'auto' ? null : parseInt(sizes[0]);
@@ -197,12 +210,19 @@ exports.handler = async (event) => {
         result = fs.readFileSync(filepath)
         newPath = `shadowed/${path}`
     } else {
-        // create a new image using provided dimensions.
-        result = await Sharp(originalImage.Body, { failOnError: false })
-            .resize(width, height, { withoutEnlargement: false, fit })
-            .rotate()
-            .toBuffer();
-        newPath = path
+        if (originalImageMime === 'image/gif') {
+            // Handle GIF resizing to preserve animation
+            result = await Sharp(originalImage.Body, { animated: true })
+                .resize(width, height, { withoutEnlargement: false, fit })
+                .toBuffer();
+        } else {
+            // Handle other image formats
+            result = await Sharp(originalImage.Body, { failOnError: false })
+                .resize(width, height, { withoutEnlargement: false, fit })
+                .rotate()  // Rotate for non-GIF images
+                .toBuffer();
+        }
+        newPath = path;
     }
 
     // save newly created image to S3.
@@ -214,16 +234,16 @@ exports.handler = async (event) => {
         CacheControl: DEFAULT_CACHE_HEADER
     }).promise();
 
-
+    return getCachedRedirect(newPath);
     // return created image as a response.
-    return {
-        statusCode: 200,
-        body: result.toString('base64'),
-        isBase64Encoded: true,
-        headers: {
-            'Content-Type': originalImageMime,
-            'Cache-Control': DEFAULT_CACHE_HEADER,
-            'Age': 0
-        }
-    };
+    // return {
+    //     statusCode: 200,
+    //     body: result.toString('base64'),
+    //     isBase64Encoded: true,
+    //     headers: {
+    //         'Content-Type': originalImageMime,
+    //         'Cache-Control': DEFAULT_CACHE_HEADER,
+    //         'Age': 0
+    //     }
+    // };
 }
