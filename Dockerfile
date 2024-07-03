@@ -1,12 +1,13 @@
-FROM amazonlinux:2.0.20200722.0
+FROM amazonlinux:2023
 
-# install dependencies
-RUN yum -y install make gcc*
-RUN curl --silent --location https://rpm.nodesource.com/setup_16.x | bash -
+# Install dependencies
+RUN yum -y install gcc-c++ make libjpeg-turbo libjpeg-turbo-devel libpng libpng-devel libtiff libtiff-devel
+
+# Install Node.js 18
+RUN curl --silent --location https://rpm.nodesource.com/setup_18.x | bash -
 RUN yum -y install nodejs
 RUN npm install --global yarn
 RUN yum -y install zip
-
 # create directories
 RUN mkdir /app /build
 
@@ -16,6 +17,7 @@ COPY ./app/* /app/
 # install npm dependencies
 WORKDIR /app
 RUN yarn install
+RUN yarn add sharp --ignore-engines
 
 # build app
 WORKDIR /app
