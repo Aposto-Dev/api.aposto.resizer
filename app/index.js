@@ -24,7 +24,7 @@ const FIT_OPTIONS = [
 
 // /c is a reserved path for precomputed images. requests to /c will not use this lambda function and will be redirected to s3 directly. 
 
-function getCachedRedirect(path) {
+function getCachedRedirect(path){
     return {
         statusCode: 302,
         headers: {
@@ -42,10 +42,10 @@ function getResource(resourcePath) {
 
     return new Promise((resolve, reject) => {
         S3.getObject(params, (err, data) => {
-            if (err) {
+            if(err) {
                 return resolve(false);
             }
-            if (data) {
+            if(data) {
                 return resolve(data);
             }
         })
@@ -53,7 +53,7 @@ function getResource(resourcePath) {
 }
 
 function saveResource(resourcePath) {
-    try {
+    try {    
         let params = {
             Bucket: BUCKET,
             Key: resourcePath
@@ -94,7 +94,7 @@ exports.handler = async (event) => {
 
     const unsupportedSharpMimeTypes = [
         'image/bmp',
-        'audio/mp3',
+        'audio/mp3', 
         'audio/mpeg'
     ];
 
@@ -108,7 +108,7 @@ exports.handler = async (event) => {
     }
 
     // Fit validation
-    if (action && (FIT_OPTIONS.indexOf(action) === -1)) {
+    if(action && (FIT_OPTIONS.indexOf(action) === -1)) {
         return {
             statusCode: 400,
             body: `Unknown Fit action parameter "${action}"\n` +
@@ -119,7 +119,7 @@ exports.handler = async (event) => {
 
     // check if a resized option exists.
     let existingResized = await getResource(path);
-    if (existingResized) {
+    if(existingResized) {
         // if a resized option exists, return it.
         return getCachedRedirect(path);
         // return {
@@ -137,7 +137,7 @@ exports.handler = async (event) => {
     let originalImage = await getResource(filename);
 
     // check if image does not exist.
-    if (!originalImage) {
+    if(!originalImage) {
         // return 404.
         return {
             statusCode: 404,
@@ -150,7 +150,7 @@ exports.handler = async (event) => {
     }
 
     const originalImageMime = originalImage.ContentType;
-    if (!allowedMimeTypes.includes(originalImageMime)) {
+    if(!allowedMimeTypes.includes(originalImageMime)) {
         // return 400.
         return {
             statusCode: 400,
@@ -163,7 +163,7 @@ exports.handler = async (event) => {
     }
 
     // handle unsupported Sharp images
-    if (unsupportedSharpMimeTypes.includes(originalImageMime)) {
+    if(unsupportedSharpMimeTypes.includes(originalImageMime)) {
         return getCachedRedirect(filename);
         // return {
         //     statusCode: 200,
@@ -192,53 +192,61 @@ exports.handler = async (event) => {
 
     let result;
     let newPath;
-
-    if (fit === 'shadow') {
-        // create a new image with white shadow. The original script is:
-        //      $ convert $1  \
-        //      > \( -clone 0 -background white -shadow 100x3+0+0 \) \
-        //      > -reverse -background none -layers merge +repage shadowed_$1
-        const { exec } = require('child_process')
-        const filepath = await saveResource(filename)
-        exec(`sh ./add_drop_shadow.sh ${filepath}`, (error, stdout, stderr) => {
-            console.log(stdout)
-            console.log(stderr)
-            if (error !== null) {
-                console.log(`exec error: ${error}`)
+    try {
+        if (fit === 'shadow') {
+            // create a new image with white shadow. The original script is:
+            //      $ convert $1  \
+            //      > \( -clone 0 -background white -shadow 100x3+0+0 \) \
+            //      > -reverse -background none -layers merge +repage shadowed_$1
+            const { exec } = require('child_process')
+            const filepath = await saveResource(filename)
+            exec(`sh ./add_drop_shadow.sh ${filepath}`, (error, stdout, stderr) => {
+                console.log(stdout)
+                console.log(stderr)
+                if (error !== null) {
+                    console.log(`exec error: ${error}`)
+                }
+            })
+            result = fs.readFileSync(filepath)
+            newPath = `shadowed/${path}`
+        } else {
+            if (originalImageMime === 'image/gif') {
+                // Handle GIF resizing to preserve animation
+                result = await Sharp(originalImage.Body, { animated: true, failOnError: false })
+                    .resize(width, height, { withoutEnlargement: false, fit })
+                    .toBuffer();
+            } else {
+                // Handle other image formats
+                result = await Sharp(originalImage.Body, { failOnError: false })
+                    .resize(width, height, { withoutEnlargement: false, fit })
+                    .rotate()  // Rotate for non-GIF images
+                    .toBuffer();
             }
-        })
-        result = fs.readFileSync(filepath)
-        newPath = `shadowed/${path}`
-    } else {
-        /*  if (originalImageMime === 'image/gif') {
-             // Handle GIF resizing to preserve animation
-             result = await Sharp(originalImage.Body, { animated: true, failOnError: false})
-                 .resize(width, height, { withoutEnlargement: false, fit })
-                 .toBuffer();
-         } else {
-             // Handle other image formats
-             result = await Sharp(originalImage.Body, { failOnError: false })
-                 .resize(width, height, { withoutEnlargement: false, fit })
-                 .rotate()  // Rotate for non-GIF images
-                 .toBuffer();
-         } */
-        result = await Sharp(originalImage.Body, { failOnError: false, animated: true })
-            .resize(width, height, { withoutEnlargement: false, fit })
-            .rotate()  // Rotate for non-GIF images
-            .toBuffer();
-        newPath = path;
+            newPath = path;
+        }
+    
+        // save newly created image to S3.
+        await S3.putObject({
+            Body: result,
+            Bucket: BUCKET,
+            ContentType: originalImageMime,
+            Key: newPath,
+            CacheControl: DEFAULT_CACHE_HEADER
+        }).promise();
+    
+        return getCachedRedirect(newPath);
+    } catch (error) {
+        console.log(error)
+        return {
+            statusCode: 500,
+            body: "Something went wrong",
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': DEFAULT_CACHE_HEADER,
+                'Age': 0
+            }
+        }
     }
-
-    // save newly created image to S3.
-    await S3.putObject({
-        Body: result,
-        Bucket: BUCKET,
-        ContentType: originalImageMime,
-        Key: newPath,
-        CacheControl: DEFAULT_CACHE_HEADER
-    }).promise();
-
-    return getCachedRedirect(newPath);
     // return created image as a response.
     // return {
     //     statusCode: 200,
