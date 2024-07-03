@@ -19,7 +19,7 @@ const inputPath = process.argv[2];
 const outputPath = process.argv[3];
 
 // Define the resize options
-const width = 600;  // Set desired width
+const width = 200;  // Set desired width
 const height = null; // Set desired height
 const fit = 'cover'; // Set the fit option
 
@@ -27,16 +27,33 @@ async function resizeGif() {
     try {
         // Read the input file
         const originalImageBody = fs.readFileSync(inputPath);
+        const fileExtension = path.extname(inputPath).toLowerCase();
+        console.log('File extension:', fileExtension);
 
-        // Resize the GIF while preserving animation
-        const result = await sharp(originalImageBody, { animated: true })
+        let newPath;
+
+        if (fileExtension === '.gif') {
+            // Handle GIF resizing to preserve animation
+            newPath = outputPath.replace('.gif', '.gif');
+            const result = await sharp(originalImageBody, { animated: true })
             .resize(width, height, { withoutEnlargement: false, fit })
             .toBuffer();
 
-        // Save the resized image to the output path
-        fs.writeFileSync(outputPath, result);
+            // Save the resized image to the output path
+            fs.writeFileSync(newPath, result);
+            console.log('GIF resized successfully:', newPath);
+        } else {
+            // Handle other image formats
+            newPath = outputPath.replace('.gif', `-resized${fileExtension}`);
+            const result = await sharp(originalImageBody, { failOnError: false })
+            .resize(width, height, { withoutEnlargement: false, fit })
+            .rotate()  // Rotate for non-GIF images
+            .toBuffer();
 
-        console.log('Image resized successfully:', outputPath);
+            // Save the resized image to the output path
+            fs.writeFileSync(newPath, result);
+            console.log('Image resized successfully:', newPath);
+        }
     } catch (err) {
         console.error('Error resizing image:', err);
     }

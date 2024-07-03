@@ -212,7 +212,7 @@ exports.handler = async (event) => {
     } else {
         if (originalImageMime === 'image/gif') {
             // Handle GIF resizing to preserve animation
-            result = await Sharp(originalImage.Body, { animated: true })
+            result = await Sharp(originalImage.Body, { animated: true, failOnError: false})
                 .resize(width, height, { withoutEnlargement: false, fit })
                 .toBuffer();
         } else {
