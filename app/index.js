@@ -222,7 +222,7 @@ exports.handler = async (event) => {
                  .rotate()  // Rotate for non-GIF images
                  .toBuffer();
          } */
-        result = await Sharp(originalImage.Body, { failOnError: false })
+        result = await Sharp(originalImage.Body, { failOnError: false, animated: true })
             .resize(width, height, { withoutEnlargement: false, fit })
             .rotate()  // Rotate for non-GIF images
             .toBuffer();
