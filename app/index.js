@@ -12,7 +12,10 @@ const WHITELISTED_DIMENSIONS = process.env.WHITELISTED_DIMENSIONS
     ? Object.freeze(process.env.WHITELISTED_DIMENSIONS.split(' '))
     : null;
 
-const DEFAULT_CACHE_HEADER = 'public, max-age=86400';
+// Resized image paths are timestamped and immutable — cache aggressively
+// so Cloudflare stops re-pulling the corpus through API Gateway every day.
+const DEFAULT_CACHE_HEADER = 'public, max-age=31536000, immutable';
+const ERROR_CACHE_HEADER = 'private, no-store';
 const FIT_OPTIONS = [
     'cover',    // Preserving aspect ratio, ensure the image covers both provided dimensions by cropping/clipping to fit. (default)
     'contain',  // Preserving aspect ratio, contain within both provided dimensions using "letterboxing" where necessary.
@@ -184,7 +187,7 @@ exports.handler = async (event) => {
         body: "Go away!",
         headers: {
             'Content-Type': 'application/json',
-            'Cache-Control': DEFAULT_CACHE_HEADER,
+            'Cache-Control': ERROR_CACHE_HEADER,
             'Age': 0
         }
     }
@@ -242,7 +245,7 @@ exports.handler = async (event) => {
             body: "Something went wrong",
             headers: {
                 'Content-Type': 'application/json',
-                'Cache-Control': DEFAULT_CACHE_HEADER,
+                'Cache-Control': ERROR_CACHE_HEADER,
                 'Age': 0
             }
         }
